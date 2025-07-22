@@ -1,0 +1,19 @@
+(+ 10 20)           
+(- (* 5 8) (/ 10 2))
+(print "Hello, world!")
+(print (+ 1 2 3))
+(print (+ 10 (* 2 5)))
+
+(let x 10)        
+(print x)         
+(let message "Rust is fun")
+(print message)   
+(let is_active true)
+(print is_active) 
+
+(let number 7)
+(if (> number 5)
+    (print "Number is greater than 5")
+    (print "Number is not greater than 5"))
+
+(let my_func (lambda (a b) (* a (* b b))))
