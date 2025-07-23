@@ -1,20 +1,26 @@
-use crate::tokenizer::token::Token;
+use std::io;
+
+use crate::tokenizer::token::Token; 
+
+#[derive(Debug, PartialEq)]
+pub enum TokenizerError {
+    UnexpectedCharacter(char, usize),
+    UnterminatedString(usize),
+    MalformedNumber(usize),
+}
+
+impl From<TokenizerError> for io::Error {
+    fn from(error: TokenizerError) -> Self {
+        io::Error::new(io::ErrorKind::InvalidInput, format!("Tokenizer error: {:?}", error))
+    }
+}
+
 
 #[derive(Debug)]
 pub struct Tokenizer {
     current_position: usize,
     current_char: Option<char>,
     source: Vec<char>,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum TokenizerError {
-    /// Encountered an unexpected character at a given position.
-    UnexpectedCharacter(char, usize),
-    /// A string literal was started but not terminated before EOF.
-    UnterminatedString(usize),
-    /// A number literal was malformed (e.g., "123.").
-    MalformedNumber(usize), // Added for more specific number errors
 }
 
 impl Tokenizer {
@@ -37,11 +43,11 @@ impl Tokenizer {
         consumed_char
     }
 
-    pub fn peek(&self) -> Option<char> {
-        self.source.get(self.current_position + 1).copied() // Use .get() for bounds checking
+    fn peek(&self) -> Option<char> {
+        self.source.get(self.current_position + 1).copied()
     }
 
-    pub fn next_token(&mut self) -> Result<Token, TokenizerError> {
+    fn next_token(&mut self) -> Result<Token, TokenizerError> {
         self.skip_whitespace();
 
         let Some(current_char) = self.current_char else {
@@ -50,61 +56,23 @@ impl Tokenizer {
         let start_pos = self.current_position;
 
         let token = match current_char {
-            // Single-character tokens: Consume and return.
-            '(' => Token::LeftParen,
-            ')' => Token::RightParen,
-            '-' => Token::Minus,
-            '+' => Token::Plus,
-            '*' => Token::Star,
-            '/' => Token::Slash,
-
-            // One or two character tokens: Check `peek()` before consuming.
-            '!' => {
-                if self.peek() == Some('=') {
-                    self.advance(); 
-                    Token::NotEqual
-                } else {
-                    return Err(TokenizerError::UnexpectedCharacter(current_char, start_pos));
-                }
+            '(' => {
+                self.advance();
+                Token::LeftParen
             }
-            '=' => {
-                if self.peek() == Some('=') {
-                    self.advance();
-                    Token::EqualEqual
-                } else {
-                    return Err(TokenizerError::UnexpectedCharacter(current_char, start_pos));
-                }
-            }
-            '>' => {
-                if self.peek() == Some('=') {
-                    self.advance();
-                    Token::GreaterEqual
-                } else {
-                    Token::Greater
-                }
-            }
-            '<' => {
-                if self.peek() == Some('=') {
-                    self.advance();
-                    Token::LessEqual
-                } else {
-                    Token::Less
-                }
+            ')' => {
+                self.advance();
+                Token::RightParen
             }
 
             '"' => self.read_string()?,
+
             '0'..='9' => self.read_number()?,
-            'a'..='z' | 'A'..='Z' | '_' => self.read_identifier_or_keyword(),
+
+            c if !c.is_whitespace() => self.read_identifier()?,
 
             _ => return Err(TokenizerError::UnexpectedCharacter(current_char, start_pos)),
         };
-
-        // For single-character tokens and the first character of multi-char tokens
-        // (excluding those handled by `read_...` methods), advance the tokenizer.
-        // `read_string`, `read_number`, `read_identifier_or_keyword` handle their own advancement.
-        if !matches!(token, Token::String(_) | Token::Number(_) | Token::Identifier(_)) {
-            self.advance();
-        }
 
         Ok(token)
     }
@@ -120,23 +88,25 @@ impl Tokenizer {
     }
 
     fn read_string(&mut self) -> Result<Token, TokenizerError> {
-        let start_char_pos = self.current_position; 
-        self.advance();
+        let start_char_pos = self.current_position;
+        self.advance(); // Consume the opening '"'
 
         let string_content_start = self.current_position;
 
         while let Some(c) = self.current_char {
             if c == '"' {
-                break; 
+                break;
             }
             self.advance();
         }
 
         if self.current_char != Some('"') {
-            return Err(TokenizerError::UnterminatedString(start_char_pos)); 
+            return Err(TokenizerError::UnterminatedString(start_char_pos));
         }
 
-        let string_value: String = self.source[string_content_start..self.current_position].iter().collect();
+        let string_value: String = self.source[string_content_start..self.current_position]
+            .iter()
+            .collect();
         self.advance();
         Ok(Token::String(string_value))
     }
@@ -145,17 +115,17 @@ impl Tokenizer {
         let start_pos = self.current_position;
 
         while let Some(c) = self.current_char {
-            if c.is_ascii_digit() {
+            if c.is_digit(10) {
                 self.advance();
             } else {
                 break;
             }
         }
 
-        if self.current_char == Some('.') && self.peek().map_or(false, |c| c.is_ascii_digit()) {
+        if self.current_char == Some('.') && self.peek().map_or(false, |c| c.is_digit(10)) {
             self.advance();
             while let Some(c) = self.current_char {
-                if c.is_ascii_digit() {
+                if c.is_digit(10) {
                     self.advance();
                 } else {
                     break;
@@ -163,32 +133,57 @@ impl Tokenizer {
             }
         }
 
-        let num_str: String = self.source[start_pos..self.current_position].iter().collect();
-        let value = num_str.parse::<f64>()
+        let num_str: String = self.source[start_pos..self.current_position]
+            .iter()
+            .collect();
+        let value = num_str
+            .parse::<f64>()
             .map_err(|_| TokenizerError::MalformedNumber(start_pos))?;
 
         Ok(Token::Number(value))
     }
 
-    fn read_identifier_or_keyword(&mut self) -> Token {
+    fn read_identifier(&mut self) -> Result<Token, TokenizerError> {
         let start_pos = self.current_position;
 
         while let Some(c) = self.current_char {
-            if c.is_ascii_alphanumeric() || c == '_' {
+            if !c.is_whitespace() && c != '(' && c != ')' && c != '"' {
                 self.advance();
             } else {
                 break;
             }
         }
-        let identifier_str: String = self.source[start_pos..self.current_position].iter().collect();
 
-        match identifier_str.as_str() {
-            "lambda" => Token::Lambda,
-            "if" => Token::If,
-            "false" => Token::False,
-            "true" => Token::True,
-            "let" => Token::Let,
-            _ => Token::Identifier(identifier_str),
+        let identifier_str: String = self.source[start_pos..self.current_position]
+            .iter()
+            .collect();
+
+        if identifier_str.is_empty() {
+            Err(TokenizerError::UnexpectedCharacter(
+                self.current_char.unwrap_or('\0'),
+                start_pos,
+            ))
+        } else {
+            Ok(Token::Identifier(identifier_str))
         }
+    }
+
+    pub fn tokenize(&mut self) -> Result<Vec<Token>, TokenizerError> {
+        let mut tokens = Vec::new();
+
+        loop {
+            match self.next_token() {
+                Ok(token) => {
+                    tokens.push(token.clone());
+                    if token == Token::Eof {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
+        Ok(tokens)
     }
 }

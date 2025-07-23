@@ -1,27 +1,11 @@
-#[derive(Debug, PartialEq, Clone)] // These traits are useful for debugging, comparison, and copying tokens
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    LeftParen,    // (
-    RightParen,   // )
-    Minus,        // -
-    Plus,         // +
-    Slash,        // /
-    Star,         // *
+    LeftParen,    // '('
+    RightParen,   // ')'
 
-    NotEqual,   // !=
-    EqualEqual,   // ==
-    Greater,      // >
-    GreaterEqual, // >=
-    Less,         // <
-    LessEqual,    // <=
+    Identifier(String), // This will capture "+", "if", "true", "false", "my-var", "=="
+    String(String),     // "hello"
+    Number(f64),        // 123.45
 
-    Identifier(String), // e.g., variable names, function names
-    String(String),     // e.g., "hello world"
-    Number(f64),        // e.g., 123, 3.14
-
-    If,
-    Let,
-    Lambda,
-    True,
-    False,
-    Eof
+    Eof // End of input
 }
