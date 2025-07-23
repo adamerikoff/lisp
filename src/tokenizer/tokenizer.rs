@@ -1,4 +1,4 @@
-use std::io;
+use std::{fmt, io};
 
 use crate::tokenizer::token::Token; 
 
@@ -7,6 +7,22 @@ pub enum TokenizerError {
     UnexpectedCharacter(char, usize),
     UnterminatedString(usize),
     MalformedNumber(usize),
+}
+
+impl fmt::Display for TokenizerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TokenizerError::UnexpectedCharacter(c, pos) => {
+                write!(f, "Unexpected character '{}' at position {}", c, pos)
+            }
+            TokenizerError::UnterminatedString(pos) => {
+                write!(f, "Unterminated string starting at position {}", pos)
+            }
+            TokenizerError::MalformedNumber(pos) => {
+                write!(f, "Malformed number at position {}", pos)
+            }
+        }
+    }
 }
 
 impl From<TokenizerError> for io::Error {

@@ -1,4 +1,4 @@
-use std::io;
+use std::{fmt, io};
 
 use crate::{ast::Expression, tokenizer::Token};
 
@@ -7,6 +7,22 @@ pub enum ParserError {
     UnexpectedToken(Token, String),
     UnmatchedParenthesis,
     EndOfInput,
+}
+
+impl fmt::Display for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ParserError::UnexpectedToken(token, expected_msg) => {
+                write!(f, "Unexpected token: {:?}. Expected {}", token, expected_msg)
+            }
+            ParserError::UnmatchedParenthesis => {
+                write!(f, "Unmatched parenthesis")
+            }
+            ParserError::EndOfInput => {
+                write!(f, "Unexpected end of input during parsing")
+            }
+        }
+    }
 }
 
 impl From<ParserError> for io::Error {
